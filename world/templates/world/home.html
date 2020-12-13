@@ -1,0 +1,454 @@
+{% extends "world/base.html" %}
+{% block content %}
+    {% load leaflet_tags %}
+    {% load static %}
+    {% load i18n %}
+    {% load crispy_forms_tags %}
+    {% load crispy_forms_filters %}
+    <style>
+        #homeUL {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .Homeli {
+            display: inline;
+        }
+    </style>
+    <head>
+        {% leaflet_js %}
+        {% leaflet_css %}
+        {% block head_title %}{% trans "Home" %}{% endblock %}
+        {% block extra_header %}
+            <style>
+                #map {
+                    width: 70vw;
+                }
+            </style>
+        {% endblock %}
+        <script type="text/javascript"
+                src="https://maps.google.com/maps/api/js?sensor=false&key=AIzaSyBIhYRKsh_uk_a9AACthR318N33Y39E9Nw"></script>
+        <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+        <script src="https://unpkg.com/osmtogeojson@2.2.12/osmtogeojson.js"></script>
+
+    </head>
+    <body>
+
+    {% block body_content %}
+        <style>
+            #bod {
+            }
+        </style>
+        {% leaflet_map "map" callback="window.map_init_basic" %}
+    {% endblock %}
+
+
+    <div class="container-fluid">
+        <div class="row">
+            <div class="card"
+                 style="background-color:white;width: 35%;justify-content: center;align-items: center;margin: 2%">
+                <div class="container">
+                    <p style="text-align: center">Location: </p>
+                    <p id="Location" style="text-align: center"></p>
+                </div>
+            </div>
+
+            <div class="card"
+                 style="background-color:white;width: 15%;justify-content: center;align-items: center;margin: 2%">
+                <div class="container">
+                    <p style="text-align: center">➨</p>
+                    <p id="Distance" style="text-align: center"></p>
+                </div>
+            </div>
+
+            <div class="card"
+                 style="background-color:white;width: 35%;justify-content: center;align-items: center;margin: 2%">
+                <div class="container">
+                    <p style="text-align: center">Destination: </p>
+                    <p id="Destination" style="text-align: center"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <div class="row">
+            <div class="card"
+                 style="background-color:white;width: 20%;justify-content: center;align-items: center;margin: 2.5%">
+                <img src="https://static.thenounproject.com/png/3516-200.png" alt="Walk"
+                     style="width:60%; height: auto; background-size: contain;">
+                <div class="container">
+                    <p id="Walk" style="text-align: center">0 Mins</p>
+                </div>
+            </div>
+            <div class="card"
+                 style="background-color:white;width: 20%;justify-content: center;align-items: center;margin: 2.5%">
+                <img src="https://static.thenounproject.com/png/215-200.png" alt="Cycle"
+                     style="width:60%; height: auto; background-size: contain;;">
+                <div class="container">
+                    <p id="Cycle" style="text-align: center">0 Mins</p>
+                </div>
+            </div>
+            <div class="card"
+                 style="background-color:white;width: 20%;justify-content: center;align-items: center;margin: 2.5%"
+                 onclick="getTransitStops()">
+                <img src="https://i.pinimg.com/originals/a5/dd/dc/a5dddcd57650ff323b969a3cdf16e9ff.png" alt="Transit"
+                     style="width:60%; height: auto;">
+                <div class="container">
+                    <p id="Transit" style="text-align: center">0 Mins</p>
+                </div>
+            </div>
+            <div class="card"
+                 style="background-color:white;width: 20%;justify-content: center;align-items: center;margin: 2.5%">
+                <img src="https://static.thenounproject.com/png/59015-200.png" alt="Car"
+                     style="width:60%; height: auto; background-size: contain;">
+                <div class="container">
+                    <p id="Car" style="text-align: center">0 Mins</p>
+                </div>
+            </div>
+        </div>
+        <div onclick="redoJourney()" class="card"
+             style="background-color:white;width: 30%; justify-content: center;align-items: center;margin: 2.5%; margin-left: 35%; margin-bottom: 6vh">
+            <img src="https://simpleicon.com/wp-content/uploads/redo-6.png" alt="Avatar"
+                 style="width:60%; height: auto; background-size: contain;">
+            <div class="container">
+                <p style="text-align: center">Last Trip</p>
+            </div>
+        </div>
+    </div>
+    </body>
+    {% block extra_footer %}
+        <script>
+            let HOST = location.protocol + "//" + location.host;
+            let locationMarker;
+            let circle, circleInner;
+            let HomeLocation;
+            let clickedDestination;
+            let userMap;
+
+            $("#map").css({
+                "width": "100%",
+                "height": "60vh"
+            });
+
+            function map_init_basic(map, options) {
+                map.setView([53.5, -8.5], 11);
+                updateLocation(map);
+                map.on('touchstart click dblclick ', function (position) {
+                    CalculateJourneys(map, HomeLocation, position.latlng)
+                });
+                userMap = map;
+            }
+
+            function redoJourney() {
+                $.ajax({
+                    type: "GET",
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    url: HOST + "/getPreviousJourney/"
+                }).done(function (data, status, xhr) {
+                    addRecentLocations(data, userMap);
+                }).fail(function (xhr, status, error) {
+                    console.log(error);
+                });
+            }
+
+            function addRecentLocations(data, map) {
+                var latlong = data[0].last_location.substring(data[0].last_location.indexOf("(") + 1, data[0].last_location.length - 1);
+                var lat = latlong.substring(0, latlong.indexOf(" "));
+                var lon = latlong.substring(latlong.indexOf(" ") + 1);
+                var latlng = new L.LatLng(lat, lon);
+                CalculateJourneys(map, HomeLocation, latlng);
+                map.flyTo(latlng, 16);
+            }
+
+            function updateLocation(map) {
+                navigator.geolocation.getCurrentPosition(function (pos) {
+                        setMapToCurrentLocation(map, pos);
+                    },
+                    function (err) {
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 30000
+                    }
+                );
+            }
+
+            function setMapToClickedLocation(map, latlng) {
+                let myLatLon = L.latLng(latlng.lat, latlng.lng);
+                map.flyTo(myLatLon, 16);
+
+            }
+
+            function setMapToCurrentLocation(map, pos) {
+                console.log("In setMapToCurrentLocation.");
+                HomeLocation = pos;
+                let myLatLon = L.latLng(pos.coords.latitude, pos.coords.longitude);
+                map.flyTo(myLatLon, 16);
+                if (circle != undefined) {
+                    map.removeLayer(circle);
+                }
+                if (circleInner != undefined) {
+                    map.removeLayer(circleInner);
+                }
+                circle = L.circle(myLatLon, {
+                    color: 'blue',
+                    fillColor: 'blue',
+                    fillOpacity: 0.1,
+                    radius: pos.coords.accuracy
+                }).addTo(map);
+                circleInner = L.circle(myLatLon, {
+                    color: 'blue',
+                    fillColor: 'blue',
+                    fillOpacity: 0.3,
+                    radius: 10
+                }).addTo(map);
+            }
+
+            function update_db(pos) {
+                let locString = pos.lat + ", " + pos.lng;
+                $.ajax({
+                    type: "POST",
+                    url: "{% url 'updatedb' %}",
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    data: {
+                        point: locString
+                    }
+                }).done(function (data, status, xhr) {
+                    console.log(data["message"])
+                }).fail(function (xhr, status, error) {
+                    console.log(error);
+                }).always(function () {
+                    console.log("update finished");
+                });
+            }
+
+            function getCookie(name) {
+                var cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    var cookies = document.cookie.split(';');
+                    for (var i = 0; i < cookies.length; i++) {
+                        var cookie = jQuery.trim(cookies[i]);
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+
+            function getTransitStops() {
+                var around = 'around:1000,' + HomeLocation.coords.latitude + ',' + HomeLocation.coords.longitude
+                var nodeQuery = 'node["public_transport"="platform"](' + around + ');';
+                var query = '?data=[out:json][timeout:15];(' + nodeQuery + ');out body geom;';
+                var baseUrl = 'https://overpass-api.de/api/interpreter';
+                var resultUrl = baseUrl + query;
+
+                $.get(resultUrl, function (osmDataAsJson) {
+                    console.log(osmDataAsJson)
+                    var resultAsGeojson = osmtogeojson(osmDataAsJson);
+                    L.geoJson(resultAsGeojson, {
+                            style: function (feature) {
+                                return {color: "#ff0000"};
+                            },
+                            filter: function (feature, layer) {
+                                var isPolygon = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry.type === "Polygon");
+                                if (isPolygon) {
+                                    feature.geometry.type = "Point";
+                                    var polygonCenter = L.latLngBounds(feature.geometry.coordinates[0]).getCenter();
+                                    feature.geometry.coordinates = [polygonCenter.lat, polygonCenter.lng];
+                                }
+                                return true;
+                            },
+                            onEachFeature: function (feature, layer) {
+                                var popup = "";
+                                var keys = Object.keys(feature.properties.tags);
+                                keys.forEach(function (key) {
+                                    popup = popup + "<dt>" + key + "</dt><dd>" + feature.properties.tags[key] + "</dd>";
+                                });
+                                popup = popup + "</dl>"
+                                layer.bindPopup(popup);
+                            }
+
+                        }
+                    ).addTo(userMap);
+                })
+                ;
+            }
+
+            window.onload = function () {
+                var geoOptions = {
+                    enableHighAccuracy: true,
+                    timeout: 3000
+                }
+
+                var geoSuccess = function (position) {
+                    startingPosition = position;
+                };
+
+                var geoError = function (error) {
+                    console.log('Error occurred. Error code: ' + error.code);
+                };
+
+
+                navigator.geolocation.getCurrentPosition(geoSuccess, geoError, geoOptions);
+
+                navigator.geolocation.watchPosition(function (position) {
+                    setMapToCurrentLocation(userMap, position);
+
+                    if (clickedDestination != undefined) {
+                        var origin = new google.maps.LatLng(position.coords.latitude, position.coords.longitude),
+                            destination = new google.maps.LatLng(clickedDestination.lat, clickedDestination.lng),
+                            googleService = new google.maps.DistanceMatrixService();
+
+                        googleService.getDistanceMatrix(
+                            {
+                                origins: [origin],
+                                destinations: [destination],
+                                travelMode: google.maps.TravelMode.DRIVING,
+                                avoidHighways: false,
+                                avoidTolls: false
+                            },
+                            callback
+                        );
+
+                        function callback(response, status) {
+                            console.log(response);
+                            console.log(status);
+                            var orig = document.getElementById("orig"),
+                                dest = document.getElementById("dest"),
+                                dist = document.getElementById("dist");
+
+                            if (status == "OK") {
+                                orig.value = response.destinationAddresses[0];
+                                dest.value = response.originAddresses[0];
+                                dist.value = response.rows[0].elements[0].distance.text;
+                            } else {
+                                alert("Error: " + status);
+                            }
+                        }
+                    }
+                });
+            };
+
+            function CalculateJourneys(map, startPos, DestPos) {
+                console.log(startPos);
+                console.log(DestPos);
+                update_db(DestPos);
+                var origin = new google.maps.LatLng(startPos.coords.latitude, startPos.coords.longitude),
+                    destination = new google.maps.LatLng(DestPos.lat, DestPos.lng),
+                    googleService = new google.maps.DistanceMatrixService();
+
+                if (locationMarker) {
+                    map.removeLayer(locationMarker);
+                }
+                locationMarker = new L.Marker(DestPos).addTo(map);
+
+                googleService.getDistanceMatrix(
+                    {
+                        origins: [origin],
+                        destinations: [destination],
+                        travelMode: google.maps.TravelMode.DRIVING,
+                        avoidHighways: false,
+                        avoidTolls: false
+                    },
+                    callbackCar
+                );
+
+                googleService.getDistanceMatrix(
+                    {
+                        origins: [origin],
+                        destinations: [destination],
+                        travelMode: google.maps.TravelMode.WALKING,
+                        avoidHighways: false,
+                        avoidTolls: false
+                    },
+                    callbackWalk
+                );
+
+                googleService.getDistanceMatrix(
+                    {
+                        origins: [origin],
+                        destinations: [destination],
+                        travelMode: google.maps.TravelMode.BICYCLING,
+                        avoidHighways: false,
+                        avoidTolls: false
+                    },
+                    callbackCycle
+                );
+
+                googleService.getDistanceMatrix(
+                    {
+                        origins: [origin],
+                        destinations: [destination],
+                        travelMode: google.maps.TravelMode.TRANSIT,
+                        avoidHighways: false,
+                        avoidTolls: false
+                    },
+                    callbackTransit
+                );
+
+                function callbackWalk(response, status) {
+                    console.log(response);
+                    console.log(status);
+                    var dist;
+
+                    if (status == "OK") {
+                        dist = response.rows[0].elements[0].duration.text;
+                    } else {
+                        alert("Error: " + status);
+                    }
+                    document.getElementById('Walk').innerHTML = dist;
+                    document.getElementById('Location').innerHTML = response.originAddresses[0];
+                    document.getElementById('Destination').innerHTML = response.destinationAddresses[0];
+                    document.getElementById('Distance').innerHTML = response.rows[0].elements[0].distance.text;
+                };
+
+                function callbackCar(response, status) {
+                    console.log(response);
+                    console.log(status);
+                    var dist;
+                    if (status == "OK") {
+                        dist = response.rows[0].elements[0].duration.text;
+                    } else {
+                        alert("Error: " + status);
+                    }
+                    document.getElementById('Car').innerHTML = dist;
+                };
+
+                function callbackTransit(response, status) {
+                    console.log(response);
+                    console.log(status);
+                    var dist;
+                    if (status == "OK") {
+                        dist = response.rows[0].elements[0].duration.text;
+                    } else {
+                        alert("Error: " + status);
+                    }
+                    document.getElementById('Transit').innerHTML = dist;
+                };
+
+                function callbackCycle(response, status) {
+                    console.log(response);
+                    console.log(status);
+                    var dist;
+                    if (status == "OK") {
+                        dist = response.rows[0].elements[0].duration.text;
+                    } else {
+                        alert("Error: " + status);
+                    }
+                    document.getElementById('Cycle').innerHTML = dist;
+                };
+            }
+
+        </script>
+    {% endblock %}
+{% endblock content %}
+
+

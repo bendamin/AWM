@@ -1,0 +1,23 @@
+{% extends "world/base.html" %}
+{% block content %}
+    <h1>About Page</h1>
+    <h1>This is a sample web mapping project by Ben Cox -<br> A student in DT228 Year 4.</h1>
+    <p>This about page is an example page with information about the site: </p>
+    <ul>
+        <li>The site is hosted by a Digital Oceans docker droplet and uses a domain from GoDaddy.</li>
+        <li>The domain is <i>bcox.xyz</i> and utilizes https encryption using nginx and certbot</li>
+        <li>It is deployed as a progressive web app and can be installed on mobile or desktop</li>
+        <li>The map will show your current location and update as you move</li>
+        <li>Clicking anywhere on the map will drop a marker and get you travel information on how long it taks to get their by various methods</li>
+        <li>The site can show and store your recent journeys but requires you to register and login first</li>
+        <li>Travel information is retrieved via the Google Distance Matrix API</li>
+        <li>While logging in please follow the criteria for passwords and usernames</li>
+        <br><br>
+        <li>The site was built and tested on a local machine and once finished, it was
+            built using <i>bcox.xyz</i>
+        </li>
+    </ul>
+    <p>The backend uses geoDjango and python</p>
+    <hr>
+    <p>&#169; Ben Cox, C17325641, 2020</p>
+{% endblock content %}

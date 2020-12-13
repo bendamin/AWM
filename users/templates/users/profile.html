@@ -1,0 +1,23 @@
+{% extends "world/base.html" %}
+{% load crispy_forms_tags %}
+{% block content %}
+
+    <h2>{{ user.username }}</h2>
+
+    <div>
+        <aside><img src="https://cdn.fastly.picmonkey.com/content4/previews/ribbon_greetings/ribbon_greetings_14_550.png" alt="thank you"/>
+        </aside>
+        <main>
+            <p>
+                Thank yo for using this Web Mapping Applications. <em>For any inquiries or issues, please contact
+                C17325641@mytudublin.ie.</em>
+            </p>
+            <br><br>
+            <p>
+                For any questions regarding your data, location or GDPR: <em>Please head to <a href="github.com/bendamins">github.com/bendamins</a> for all the latest information</em>
+            </p>
+            <button>Thank You</button>
+        </main>
+    </div>
+
+{% endblock content %}
