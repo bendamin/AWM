@@ -121,10 +121,15 @@
     {% block extra_footer %}
         <script>
             let HOST = location.protocol + "//" + location.host;
+            // pin for location destination
             let locationMarker;
+            // circles for drawing current location and accuracy radius
             let circle, circleInner;
+            // Origin location
             let HomeLocation;
+            // location being clicked
             let clickedDestination;
+            // the user's map
             let userMap;
 
             $("#map").css({
@@ -132,15 +137,19 @@
                 "height": "60vh"
             });
 
+            // initialize map
             function map_init_basic(map, options) {
                 map.setView([53.5, -8.5], 11);
                 updateLocation(map);
+                // om click, calculate the user's journey
                 map.on('touchstart click dblclick ', function (position) {
                     CalculateJourneys(map, HomeLocation, position.latlng)
                 });
+                // asign userMap
                 userMap = map;
             }
 
+            // replot the user's last journey using data from database
             function redoJourney() {
                 $.ajax({
                     type: "GET",
@@ -149,23 +158,32 @@
                     },
                     url: HOST + "/getPreviousJourney/"
                 }).done(function (data, status, xhr) {
+                    // add the last location as a marker and calc distance
                     addRecentLocations(data, userMap);
                 }).fail(function (xhr, status, error) {
                     console.log(error);
                 });
             }
 
+            // add the last location as a marker and calc distance
             function addRecentLocations(data, map) {
+                // latlong from last pinned location in the database
                 var latlong = data[0].last_location.substring(data[0].last_location.indexOf("(") + 1, data[0].last_location.length - 1);
+                // get lat variable
                 var lat = latlong.substring(0, latlong.indexOf(" "));
+                // get long variable 
                 var lon = latlong.substring(latlong.indexOf(" ") + 1);
+                // store latlng as latlng
                 var latlng = new L.LatLng(lat, lon);
+                // pass latlng to calculate journeys
                 CalculateJourneys(map, HomeLocation, latlng);
                 map.flyTo(latlng, 16);
             }
 
+            // update to current user location
             function updateLocation(map) {
                 navigator.geolocation.getCurrentPosition(function (pos) {
+                        // update location circles and fly to current location
                         setMapToCurrentLocation(map, pos);
                     },
                     function (err) {
@@ -177,23 +195,29 @@
                 );
             }
 
+            // set map to clicked location using latlng passed
             function setMapToClickedLocation(map, latlng) {
                 let myLatLon = L.latLng(latlng.lat, latlng.lng);
                 map.flyTo(myLatLon, 16);
 
             }
 
+            // set map to user's current location
             function setMapToCurrentLocation(map, pos) {
                 console.log("In setMapToCurrentLocation.");
                 HomeLocation = pos;
+                // get latlng from pos passed
                 let myLatLon = L.latLng(pos.coords.latitude, pos.coords.longitude);
+                // fly to current location on map
                 map.flyTo(myLatLon, 16);
+                // if there is a location circle and circleInner already on the map, clear it
                 if (circle != undefined) {
                     map.removeLayer(circle);
                 }
                 if (circleInner != undefined) {
                     map.removeLayer(circleInner);
                 }
+                // add the inner and out circles representing user location
                 circle = L.circle(myLatLon, {
                     color: 'blue',
                     fillColor: 'blue',
@@ -208,7 +232,9 @@
                 }).addTo(map);
             }
 
+            // update the user's last journey locatino in their database
             function update_db(pos) {
+                // store as string
                 let locString = pos.lat + ", " + pos.lng;
                 $.ajax({
                     type: "POST",
@@ -242,17 +268,21 @@
                 }
                 return cookieValue;
             }
-
+            
+            // get all local transit stops and platforms and pin on map
             function getTransitStops() {
+                // build overpass query
                 var around = 'around:1000,' + HomeLocation.coords.latitude + ',' + HomeLocation.coords.longitude
                 var nodeQuery = 'node["public_transport"="platform"](' + around + ');';
                 var query = '?data=[out:json][timeout:15];(' + nodeQuery + ');out body geom;';
                 var baseUrl = 'https://overpass-api.de/api/interpreter';
                 var resultUrl = baseUrl + query;
-
+                
+                // get overpass result using query
                 $.get(resultUrl, function (osmDataAsJson) {
                     console.log(osmDataAsJson)
                     var resultAsGeojson = osmtogeojson(osmDataAsJson);
+                    // using the return query data, app markers for each transit stop
                     L.geoJson(resultAsGeojson, {
                             style: function (feature) {
                                 return {color: "#ff0000"};
@@ -281,7 +311,8 @@
                 })
                 ;
             }
-
+            
+            // on page load, set up geo map settings
             window.onload = function () {
                 var geoOptions = {
                     enableHighAccuracy: true,
@@ -298,15 +329,19 @@
 
 
                 navigator.geolocation.getCurrentPosition(geoSuccess, geoError, geoOptions);
-
+                
+                // watch position used when user changes location
                 navigator.geolocation.watchPosition(function (position) {
+                    // on change of location, update map position
                     setMapToCurrentLocation(userMap, position);
 
+                    // if the user previously clicked, ensure marker is still drawn and update distance and travel info
                     if (clickedDestination != undefined) {
+                        // Google Distance matrix used for fetching travel time by various methods
                         var origin = new google.maps.LatLng(position.coords.latitude, position.coords.longitude),
                             destination = new google.maps.LatLng(clickedDestination.lat, clickedDestination.lng),
                             googleService = new google.maps.DistanceMatrixService();
-
+                        // google distance matrix for getting distance, and current and destination location names
                         googleService.getDistanceMatrix(
                             {
                                 origins: [origin],
@@ -318,6 +353,7 @@
                             callback
                         );
 
+                        // call back method for filling place name and distance fields
                         function callback(response, status) {
                             console.log(response);
                             console.log(status);
@@ -337,19 +373,24 @@
                 });
             };
 
+            // calculate journeys for all accepted transport methods
             function CalculateJourneys(map, startPos, DestPos) {
                 console.log(startPos);
                 console.log(DestPos);
                 update_db(DestPos);
+                // setup Google Distance matrix
                 var origin = new google.maps.LatLng(startPos.coords.latitude, startPos.coords.longitude),
                     destination = new google.maps.LatLng(DestPos.lat, DestPos.lng),
                     googleService = new google.maps.DistanceMatrixService();
 
+                // remove location marker if already set
                 if (locationMarker) {
                     map.removeLayer(locationMarker);
                 }
+                // add the new location marker
                 locationMarker = new L.Marker(DestPos).addTo(map);
 
+                // get car travel information
                 googleService.getDistanceMatrix(
                     {
                         origins: [origin],
@@ -360,7 +401,8 @@
                     },
                     callbackCar
                 );
-
+                
+                // get walking travel information
                 googleService.getDistanceMatrix(
                     {
                         origins: [origin],
@@ -372,6 +414,7 @@
                     callbackWalk
                 );
 
+                // get cycling travel information
                 googleService.getDistanceMatrix(
                     {
                         origins: [origin],
@@ -383,6 +426,7 @@
                     callbackCycle
                 );
 
+                // get transit information
                 googleService.getDistanceMatrix(
                     {
                         origins: [origin],
@@ -394,6 +438,7 @@
                     callbackTransit
                 );
 
+                // callback method for walking
                 function callbackWalk(response, status) {
                     console.log(response);
                     console.log(status);
@@ -404,12 +449,15 @@
                     } else {
                         alert("Error: " + status);
                     }
+                    // add the duration info to walking
                     document.getElementById('Walk').innerHTML = dist;
+                    // update origin, destination and distance fields
                     document.getElementById('Location').innerHTML = response.originAddresses[0];
                     document.getElementById('Destination').innerHTML = response.destinationAddresses[0];
                     document.getElementById('Distance').innerHTML = response.rows[0].elements[0].distance.text;
                 };
 
+                // callback method for car
                 function callbackCar(response, status) {
                     console.log(response);
                     console.log(status);
@@ -419,9 +467,11 @@
                     } else {
                         alert("Error: " + status);
                     }
+                    // update car travel time field
                     document.getElementById('Car').innerHTML = dist;
                 };
 
+                // callback for transit
                 function callbackTransit(response, status) {
                     console.log(response);
                     console.log(status);
@@ -431,9 +481,11 @@
                     } else {
                         alert("Error: " + status);
                     }
+                    // update transite duration information
                     document.getElementById('Transit').innerHTML = dist;
                 };
 
+                // callback for cycling
                 function callbackCycle(response, status) {
                     console.log(response);
                     console.log(status);
@@ -443,6 +495,7 @@
                     } else {
                         alert("Error: " + status);
                     }
+                    // update cycling travel time information
                     document.getElementById('Cycle').innerHTML = dist;
                 };
             }
